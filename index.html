@@ -1,0 +1,806 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>CricStats Scorer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a night-match broadcast. Chalk type on pitch-black ink, one leather-red accent,
+   amber for live numbers. Committed to a single dark look, so every colour is set explicitly. */
+:root{
+  --ink:#0a0d12; --panel:#11171f; --panel-2:#171f29; --line:#263243; --line-2:#1b2431;
+  --chalk:#eef1f4; --mute:#8794a4; --leather:#e4502f; --amber:#ffb640; --grass:#34c27a; --sky:#6ab7ff;
+  --f-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--chalk);font-family:var(--f-body);line-height:1.55;-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--ink)}
+.wrap{max-width:1180px;margin:0 auto}
+a{color:inherit}
+h1,h2,h3{margin:0}
+.mono{font-family:var(--f-mono)}
+.kicker{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(10,13,18,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:14px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:900;font-size:24px;letter-spacing:.04em;text-decoration:none}
+.brand b{color:var(--leather);font-weight:900}
+.bar nav{display:flex;gap:18px;flex-wrap:wrap;font-size:14px}
+.bar nav a{text-decoration:none;color:var(--mute);transition:color .2s}
+.bar nav a:hover{color:var(--chalk)}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding-block:56px 48px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(55% 50% at 85% 0%,rgba(228,80,47,.20),transparent 70%),
+             radial-gradient(45% 40% at 5% 100%,rgba(52,194,122,.10),transparent 70%)}
+.hero-grid{position:relative;display:grid;gap:44px;grid-template-columns:1.05fr .95fr;align-items:center}
+@media (max-width:880px){.hero-grid{grid-template-columns:1fr}}
+.wordmark{font-family:var(--f-display);font-weight:900;font-size:clamp(70px,13vw,168px);line-height:.84;text-transform:uppercase;margin:16px 0 22px;letter-spacing:-.005em}
+.wordmark span{display:inline-block;animation:rise .9s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i) * 70ms)}
+.wordmark em{font-style:normal;color:var(--leather)}
+@keyframes rise{from{transform:translateY(55%)}to{transform:none}}
+.lede{font-size:clamp(17px,2vw,20px);color:var(--mute);max-width:44ch;margin:0}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+.btn{font:600 14px var(--f-body);padding:12px 18px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--chalk);cursor:pointer;text-decoration:none;display:inline-block;transition:transform .2s ease,background .2s ease,border-color .2s ease}
+.btn:hover{transform:translateY(-2px);border-color:var(--mute)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--leather);border-color:var(--leather);color:#fff}
+
+/* ---------- live board ---------- */
+.board{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 36px 90px -36px rgba(0,0,0,.8)}
+.board-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;background:#0d1319;border-bottom:1px solid var(--line);font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.live{color:var(--leather)}
+.live::before{content:"\25CF\00a0";animation:blink 1.2s steps(2,start) infinite}
+@keyframes blink{to{visibility:hidden}}
+.board-main{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:20px 20px 10px}
+.team{font-family:var(--f-display);font-weight:800;text-transform:uppercase;font-size:22px;letter-spacing:.03em}
+.score{font-family:var(--f-display);font-weight:900;font-size:clamp(64px,9vw,100px);line-height:.9;color:var(--amber);font-variant-numeric:tabular-nums}
+.score .sl{color:var(--chalk);opacity:.5;font-size:.5em;margin-left:4px}
+.ovr{font-family:var(--f-mono);font-size:12px;color:var(--mute);text-align:right;line-height:1.7}
+.ov-num{font-size:24px;color:var(--chalk)}
+.tick{animation:tick .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes tick{from{transform:translateY(-16px);opacity:.25}to{transform:none;opacity:1}}
+.board-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 20px;border-top:1px solid var(--line);font-size:15px;flex-wrap:wrap}
+.board-row .mono{font-size:14px}
+.star{color:var(--amber);margin-left:2px}
+.sep{color:var(--line);margin:0 8px}
+.result{padding:12px 20px;border-top:1px solid var(--line);background:rgba(228,80,47,.12);color:var(--chalk);font-family:var(--f-display);font-weight:800;text-transform:uppercase;font-size:20px;letter-spacing:.03em}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line);min-height:56px;align-items:center}
+.chip{min-width:34px;height:34px;padding:0 9px;display:inline-grid;place-items:center;border-radius:999px;font:500 13px var(--f-mono);background:#1a2330;color:var(--chalk);border:1px solid var(--line);animation:pop .35s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{from{transform:scale(.6)}to{transform:none}}
+.c-w{background:var(--leather);border-color:var(--leather);color:#fff}
+.c-four{background:rgba(52,194,122,.16);border-color:var(--grass);color:var(--grass)}
+.c-six{background:rgba(255,182,64,.16);border-color:var(--amber);color:var(--amber)}
+.c-ex{border-style:dashed;border-color:var(--sky);color:var(--sky)}
+.comm{padding:4px 20px 16px;font-size:14px;color:var(--mute);min-height:96px}
+.comm p{margin:6px 0}
+.comm p.new{color:var(--chalk);animation:slide .4s ease}
+@keyframes slide{from{transform:translateX(-10px);opacity:.3}to{transform:none;opacity:1}}
+
+/* ---------- sections ---------- */
+section.block{padding-block:80px;border-top:1px solid var(--line)}
+h2{font-family:var(--f-display);font-weight:800;font-size:clamp(44px,6.4vw,80px);line-height:.92;text-transform:uppercase;margin:14px 0 18px;text-wrap:balance}
+.sec-lede{color:var(--mute);max-width:62ch;font-size:17px;margin:0}
+.rv{transform:translateY(18px);transition:transform .9s cubic-bezier(.2,.7,.2,1)}
+.rv.in{transform:none}
+
+/* engine pipeline */
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);margin-top:40px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.step{padding:24px 22px;border-right:1px solid var(--line);min-width:0;animation:glow 4s infinite;animation-delay:calc(var(--i) * 1s)}
+.step:last-child{border-right:0}
+.step .n{font-family:var(--f-mono);font-size:12px;color:var(--mute)}
+.step h3{font-family:var(--f-display);font-weight:800;font-size:28px;text-transform:uppercase;margin:6px 0 6px}
+.step p{margin:0;color:var(--mute);font-size:14px}
+@keyframes glow{0%,22%{background:#16202c}30%,100%{background:transparent}}
+@media (max-width:860px){.pipe{grid-template-columns:1fr 1fr}.step:nth-child(2){border-right:0}.step:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+@media (max-width:520px){.pipe{grid-template-columns:1fr}.step{border-right:0;border-bottom:1px solid var(--line)}.step:last-child{border-bottom:0}}
+.undo-note{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media (max-width:760px){.undo-note{grid-template-columns:1fr}}
+.code{background:#070a0e;border:1px solid var(--line);border-radius:12px;padding:16px 18px;font:400 13px/1.6 var(--f-mono);overflow-x:auto;margin:0;color:#c9d3df;min-width:0}
+.code .k{color:var(--sky)}
+.code .c{color:#5d6b7c}
+.note{color:var(--mute);font-size:15px;margin:0}
+.note strong{color:var(--chalk);font-weight:600}
+
+/* scorer */
+.scorer{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:18px;margin-top:40px;align-items:start}
+@media (max-width:900px){.scorer{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}
+.label{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:16px 0 8px}
+.label:first-child{margin-top:0}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font:500 14px var(--f-mono);min-width:44px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:#0c1218;color:var(--chalk);cursor:pointer;transition:background .15s,color .15s,transform .15s}
+.seg button:hover{transform:translateY(-1px)}
+.seg button[aria-pressed="true"]{background:var(--chalk);color:var(--ink);border-color:var(--chalk)}
+select{width:100%;padding:11px 12px;border-radius:10px;background:#0c1218;color:var(--chalk);border:1px solid var(--line);font:500 14px var(--f-body)}
+select:disabled{opacity:.6}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:420px){.row2{grid-template-columns:1fr}}
+.check{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;color:var(--mute)}
+.rec{width:100%;margin-top:18px;padding:16px;font:800 24px var(--f-display);text-transform:uppercase;letter-spacing:.05em;background:var(--leather);color:#fff;border:0;border-radius:12px;cursor:pointer;transition:transform .15s,filter .15s}
+.rec:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.rec:active{transform:translateY(1px)}
+.rec:disabled{opacity:.4;cursor:not-allowed}
+.row3{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.row3 .btn{padding:9px 14px;font-size:13px}
+.msg{min-height:22px;font-size:13px;color:var(--mute);margin-top:12px}
+.msg.err{color:#ff8a7a}
+.msg.ok{color:var(--grass)}
+.live-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.done{font-family:var(--f-mono);font-size:12px;color:var(--amber)}
+.live-score{font-family:var(--f-display);font-weight:900;font-size:76px;line-height:.9;color:var(--amber);font-variant-numeric:tabular-nums;margin-top:8px}
+.live-score span{color:var(--chalk);opacity:.5;font-size:.55em}
+.live-score small{font-family:var(--f-mono);font-size:14px;color:var(--mute);font-weight:400;margin-left:10px}
+.small{font-size:13px;color:var(--mute);margin-top:8px}
+.panel .chips{padding:14px 0 0;border-top:0;margin-top:6px}
+.panel .result{margin:14px -18px -18px;border-radius:0 0 16px 16px}
+.live-card{margin-top:18px}
+
+/* scorecards */
+.sc-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.sc-head h3{font-family:var(--f-display);font-weight:800;text-transform:uppercase;font-size:24px;letter-spacing:.02em}
+.sc-head .tot{font-family:var(--f-display);font-weight:900;font-size:34px;color:var(--amber);font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto;margin:0 -2px}
+.sc-t{width:100%;border-collapse:collapse;font-size:14px;min-width:420px}
+.sc-t th{font:500 11px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--mute);text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}
+.sc-t td{padding:8px 6px;border-bottom:1px solid var(--line-2);text-align:right;font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:13px}
+.sc-t th:first-child,.sc-t td.nm,.sc-t td.how{text-align:left}
+.sc-t td.nm{font-family:var(--f-body);font-weight:600;font-size:14px}
+.sc-t td.how{font-family:var(--f-body);color:var(--mute);font-size:13px}
+.sc-meta{font-size:13px;color:var(--mute);margin:12px 0 0}
+.sc-meta b{color:var(--chalk);font-weight:600}
+.sc-list{list-style:none;padding:0;margin:8px 0 0;font-size:13px;color:var(--chalk)}
+.sc-list li{padding:6px 0;border-bottom:1px solid var(--line-2)}
+.sc-list span{color:var(--mute);font-family:var(--f-mono);font-size:12px}
+.sc-sub{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:18px 0 0}
+
+/* features */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:40px}
+@media (max-width:920px){.grid{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;min-width:0;transition:transform .25s ease,border-color .25s ease}
+.card:hover{transform:translateY(-3px);border-color:#3a4a60}
+.card .big{font-family:var(--f-display);font-weight:900;font-size:44px;line-height:1;color:var(--leather)}
+.card h3{font-family:var(--f-display);font-weight:800;font-size:26px;text-transform:uppercase;margin:10px 0 8px}
+.card p{margin:0;color:var(--mute);font-size:15px}
+.pts{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.pts{grid-template-columns:1fr}}
+.pts dl{margin:14px 0 0;display:grid;grid-template-columns:auto 1fr;gap:10px 18px;align-items:baseline;font-size:15px}
+.pts dt{font-family:var(--f-mono);color:var(--amber);font-size:14px}
+.pts dd{margin:0;color:var(--mute)}
+
+/* install */
+.install{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media (max-width:820px){.install{grid-template-columns:1fr}}
+.cmd{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#070a0e;border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-family:var(--f-mono);font-size:14px;margin-top:12px;min-width:0}
+.cmd code{overflow-x:auto;white-space:nowrap;color:var(--chalk);min-width:0}
+.ghost{font:500 12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;background:transparent;border:1px solid var(--line);color:var(--mute);border-radius:999px;padding:6px 12px;cursor:pointer;flex:none}
+.ghost:hover{color:var(--chalk)}
+.cmd .dim{color:var(--mute)}
+
+footer{border-top:1px solid var(--line);padding-block:32px 40px;color:var(--mute);font-size:14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+footer b{color:var(--chalk);font-family:var(--f-display);font-weight:800;text-transform:uppercase;letter-spacing:.03em;font-size:18px}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .rv{transform:none}
+}
+</style>
+
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="#top">CRIC<b>STATS</b></a>
+    <nav>
+      <a href="#scorer">Live scorer</a>
+      <a href="#engine">Engine</a>
+      <a href="#install">Install</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top" class="wrap">
+
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="kicker">Ball-by-ball cricket engine · Python</div>
+        <h1 class="wordmark" aria-label="CricStats">
+          <span style="--i:0">C</span><span style="--i:1">R</span><span style="--i:2">I</span><span style="--i:3">C</span><em><span style="--i:4">S</span><span style="--i:5">T</span><span style="--i:6">A</span><span style="--i:7">T</span><span style="--i:8">S</span></em>
+        </h1>
+        <p class="lede">Every delivery is an immutable event. Batting, bowling, extras, partnerships and run rates are worked out from those events, so undo is simply: drop the last one and replay.</p>
+        <div class="cta">
+          <a class="btn primary" href="#scorer">Score a match</a>
+          <a class="btn" href="#engine">How it works</a>
+        </div>
+      </div>
+      <div>
+        <div class="board" id="board" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block rv" id="engine">
+    <div class="kicker">How it works</div>
+    <h2>One event log.<br>Every figure derived.</h2>
+    <p class="sec-lede">Nothing on a scorecard is typed in by hand. The engine validates each ball, applies it to the innings state, then computes the statistics from that state.</p>
+    <div class="pipe">
+      <div class="step" style="--i:0"><div class="n">01</div><h3>Ball event</h3><p>One immutable record: bowler, runs off the bat, extra type, wicket and fielder.</p></div>
+      <div class="step" style="--i:1"><div class="n">02</div><h3>Validate</h3><p>Rejects a bowler who bowled the last over, a wicket that clashes with its extra, a fielder from the wrong side.</p></div>
+      <div class="step" style="--i:2"><div class="n">03</div><h3>Apply</h3><p>Moves the score, strike and over count, and closes partnerships at each wicket.</p></div>
+      <div class="step" style="--i:3"><div class="n">04</div><h3>Derive</h3><p>Batting, bowling, fall of wickets, run rate, required rate and player-of-the-match points.</p></div>
+    </div>
+    <div class="undo-note">
+      <pre class="code"><span class="k">def</span> undo(self) -&gt; bool:
+    <span class="k">if not</span> self.events:
+        <span class="k">return</span> False
+    kept = self.events[:-1]
+    self.events = []
+    self._reset()
+    <span class="k">for</span> b <span class="k">in</span> kept:   <span class="c"># state is purely derived</span>
+        self._apply(b)
+        self.events.append(b)
+    <span class="k">return</span> True</pre>
+      <p class="note"><strong>Undo has no special case.</strong> The engine never edits state in place, so rewinding a mistake is the same replay used for every other ball. That is why a wrongly scored delivery can always be fixed without a stale total anywhere.</p>
+    </div>
+  </section>
+
+  <section class="block rv" id="scorer">
+    <div class="kicker">Live scorer · Royals v Titans · 5 overs</div>
+    <h2>Score it<br>ball by ball</h2>
+    <p class="sec-lede">Pick the bowler, choose what happened and record it. The board above and the scorecard below are recomputed from the event log every time.</p>
+
+    <div class="scorer">
+      <div class="panel" id="controls">
+        <div class="label">Bowler</div>
+        <select id="bowler" aria-label="Bowler"></select>
+
+        <div class="label">Runs</div>
+        <div class="seg" id="runs">
+          <button type="button" data-v="0" aria-pressed="true">0</button>
+          <button type="button" data-v="1" aria-pressed="false">1</button>
+          <button type="button" data-v="2" aria-pressed="false">2</button>
+          <button type="button" data-v="3" aria-pressed="false">3</button>
+          <button type="button" data-v="4" aria-pressed="false">4</button>
+          <button type="button" data-v="6" aria-pressed="false">6</button>
+        </div>
+
+        <div class="label">Extra</div>
+        <div class="seg" id="extra">
+          <button type="button" data-v="" aria-pressed="true">None</button>
+          <button type="button" data-v="wd" aria-pressed="false">Wide</button>
+          <button type="button" data-v="nb" aria-pressed="false">No-ball</button>
+          <button type="button" data-v="b" aria-pressed="false">Bye</button>
+          <button type="button" data-v="lb" aria-pressed="false">Leg bye</button>
+        </div>
+
+        <div class="label">Wicket</div>
+        <div class="row2">
+          <select id="wkt" aria-label="Wicket type">
+            <option value="">No wicket</option>
+            <option value="bowled">Bowled</option>
+            <option value="caught">Caught</option>
+            <option value="lbw">LBW</option>
+            <option value="stumped">Stumped</option>
+            <option value="hitwicket">Hit wicket</option>
+            <option value="runout">Run out</option>
+          </select>
+          <select id="fld" aria-label="Fielder"></select>
+        </div>
+        <label class="check"><input type="checkbox" id="nons"> Non-striker is out</label>
+
+        <button class="rec" id="rec" type="button">Record ball</button>
+        <div class="row3">
+          <button class="btn" id="undo" type="button">Undo</button>
+          <button class="btn" id="chase" type="button">Start chase</button>
+          <button class="btn" id="reset" type="button">New match</button>
+        </div>
+        <div class="msg" id="msg" role="status"></div>
+      </div>
+
+      <div class="panel" id="livePanel">
+        <div id="live"></div>
+        <div class="live-card" id="liveCard"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block rv">
+    <div class="kicker">What it computes</div>
+    <h2>Everything<br>a scorer checks</h2>
+    <div class="grid">
+      <div class="card"><div class="big">R·B</div><h3>Batting</h3><p>Runs, balls faced, fours, sixes and strike rate for every batter, with how each one was out.</p></div>
+      <div class="card"><div class="big">O·M</div><h3>Bowling</h3><p>Overs, maidens, runs, wickets, economy, wides and no-balls. Byes are not charged to the bowler.</p></div>
+      <div class="card"><div class="big">+ex</div><h3>Extras</h3><p>Byes, leg byes, wides and no-balls kept apart, with the penalty run on each illegal delivery.</p></div>
+      <div class="card"><div class="big">2-41</div><h3>Fall of wickets</h3><p>Each wicket with the score and the over it fell in, in the order they came.</p></div>
+      <div class="card"><div class="big">P·B</div><h3>Partnerships</h3><p>Runs and balls per pair, with each batter's share and extras. The unbroken stand is marked live.</p></div>
+      <div class="card"><div class="big">RRR</div><h3>Run rates</h3><p>Current run rate, and in a chase the runs needed and the rate required from here.</p></div>
+    </div>
+
+    <div class="pts">
+      <div class="panel">
+        <div class="kicker">Player of the match points</div>
+        <dl>
+          <dt>1 / run</dt><dd>Bat, +1 per four, +2 per six</dd>
+          <dt>+20 / +40</dt><dd>Fifty and century</dd>
+          <dt>−5</dt><dd>Duck</dd>
+        </dl>
+      </div>
+      <div class="panel">
+        <div class="kicker">Bowling and fielding points</div>
+        <dl>
+          <dt>25 / wkt</dt><dd>Plus 10 per maiden</dd>
+          <dt>+15 / +30</dt><dd>Three-wicket and five-wicket hauls</dd>
+          <dt>10</dt><dd>Per fielding dismissal</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="block rv" id="install">
+    <div class="kicker">Get it running</div>
+    <h2>One command.<br>Standard library only.</h2>
+    <div class="install">
+      <div>
+        <p class="sec-lede">Save the file as <strong style="color:var(--chalk)">cricstats.py</strong> and run it. It asks for the two teams, their batting order, the overs and who bats first, then scores the match in the terminal with the same rules as this page.</p>
+      </div>
+      <div>
+        <div class="cmd"><code><span class="dim">$</span> python cricstats.py</code><button class="ghost" type="button" data-copy="python cricstats.py">Copy</button></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span><b>CricStats</b> · the scoring engine is in cricstats.py. This page runs a JavaScript port of the same event model, so the board and scorecards are computed live.</span>
+    <a href="#top" style="color:var(--mute)">Back to top</a>
+  </footer>
+</main>
+
+<script>
+/* ============================ engine (port of cricstats.py) ============================ */
+const BOWLER_WICKETS = ["bowled","caught","lbw","stumped","hitwicket"];
+const ALL_WICKETS = [...BOWLER_WICKETS,"runout"];
+const fmtOvers = b => `${Math.floor(b/6)}.${b%6}`;
+const ordinal = n => ({1:"1st",2:"2nd",3:"3rd"})[n] || `${n}th`;
+const plural = (n,w) => `${n} ${w}${n===1?"":"s"}`;
+const sg = n => (n>=0?"+":"")+n;
+const newBat = () => ({runs:0,balls:0,fours:0,sixes:0,out:false,how:""});
+const newBowl = () => ({balls:0,runs:0,wkts:0,maidens:0,wides:0,noballs:0});
+const newPart = (wicket,a,b) => ({wicket,a,b,runs:0,balls:0,extras:0,contrib:new Map([[a,0],[b,0]])});
+const sr = f => f.balls ? f.runs*100/f.balls : 0;
+const eco = f => f.balls ? f.runs*6/f.balls : 0;
+
+class Innings {
+  constructor(batting, bowling, maxOvers, target=null){
+    this.batting = batting; this.bowling = bowling;
+    this.maxOvers = maxOvers; this.maxBalls = maxOvers*6; this.target = target;
+    this.events = [];
+    this.reset();
+  }
+  reset(){
+    const p = this.batting.players;
+    this.runs = 0; this.wickets = 0; this.balls = 0;
+    this.extras = {wd:0,nb:0,b:0,lb:0};
+    this.bat = new Map([[p[0],newBat()],[p[1],newBat()]]);
+    this.bowl = new Map();
+    this.fielding = new Map();
+    this.striker = p[0]; this.nonStriker = p[1]; this.nextIdx = 2;
+    this.fow = [];
+    this.donePart = [];
+    this.part = newPart(1,p[0],p[1]);
+    this.overBowler = null; this.lastBowler = null;
+    this.overRuns = 0; this.overLegal = 0;
+    this.finished = false; this.endReason = "";
+  }
+  get allOut(){ return this.wickets >= this.batting.players.length-1; }
+  record(ball){ this.validate(ball); this.apply(ball); this.events.push(ball); }
+  undo(){
+    if(!this.events.length) return false;
+    const kept = this.events.slice(0,-1);
+    this.events = [];
+    this.reset();
+    for(const b of kept){ this.apply(b); this.events.push(b); }
+    return true;
+  }
+  validate(b){
+    if(this.finished) throw new Error("Innings is already over");
+    if(!this.bowling.players.includes(b.bowler)) throw new Error(`${b.bowler} is not in ${this.bowling.name}`);
+    if(this.overBowler===null && b.bowler===this.lastBowler) throw new Error("A bowler cannot bowl two consecutive overs");
+    if(this.overBowler!==null && b.bowler!==this.overBowler) throw new Error(`${this.overBowler} must finish the over`);
+    if(b.batRuns<0 || b.batRuns>7) throw new Error("Runs off the bat must be 0-7");
+    if(b.wicket){
+      if(!ALL_WICKETS.includes(b.wicket)) throw new Error("Unknown wicket type");
+      if(b.wicket!=="runout"){
+        if(b.batRuns || b.extraRuns || ["b","lb","nb"].includes(b.extra)) throw new Error(`'${b.wicket}' cannot happen with runs or that extra`);
+        if(b.extra==="wd" && !["stumped","hitwicket"].includes(b.wicket)) throw new Error("On a wide only stumped, hit wicket or run out");
+      }
+      if(["caught","stumped"].includes(b.wicket) && !b.fielder) throw new Error(`'${b.wicket}' needs a fielder`);
+      if(b.fielder && !this.bowling.players.includes(b.fielder)) throw new Error(`${b.fielder} is not in ${this.bowling.name}`);
+    }
+  }
+  apply(b){
+    const ex = b.extra;
+    const legal = ex!=="wd" && ex!=="nb";
+    const bat = this.bat.get(this.striker);
+    if(!this.bowl.has(b.bowler)) this.bowl.set(b.bowler, newBowl());
+    const bowl = this.bowl.get(b.bowler);
+    this.overBowler = b.bowler;
+
+    let batRuns = 0, extraTotal = 0, cost, rotate;
+    if(ex==="wd"){ extraTotal = 1+b.extraRuns; bowl.wides += extraTotal; cost = extraTotal; rotate = b.extraRuns; }
+    else if(ex==="nb"){ batRuns = b.batRuns; extraTotal = 1; bowl.noballs++; cost = 1+batRuns; rotate = batRuns; }
+    else if(ex==="b" || ex==="lb"){ extraTotal = b.extraRuns; cost = 0; rotate = b.extraRuns; }
+    else { batRuns = b.batRuns; cost = batRuns; rotate = batRuns; }
+    if(ex) this.extras[ex] += extraTotal;
+
+    if(ex!=="wd"){
+      bat.balls++; bat.runs += batRuns;
+      if(batRuns===4) bat.fours++;
+      if(batRuns===6) bat.sixes++;
+    }
+    const total = batRuns + extraTotal;
+    this.runs += total;
+    bowl.runs += cost; this.overRuns += cost;
+    this.part.runs += total; this.part.extras += extraTotal;
+    this.part.contrib.set(this.striker, (this.part.contrib.get(this.striker)||0) + batRuns);
+    if(legal){ this.balls++; this.part.balls++; bowl.balls++; this.overLegal++; }
+
+    let outName = null;
+    if(b.wicket) outName = b.out==="striker" ? this.striker : this.nonStriker;
+    if(rotate%2) [this.striker, this.nonStriker] = [this.nonStriker, this.striker];
+    if(outName) this.wicketFall(b, outName, bowl);
+
+    if(legal && this.overLegal===6){
+      if(this.overRuns===0) bowl.maidens++;
+      [this.striker, this.nonStriker] = [this.nonStriker, this.striker];
+      this.lastBowler = b.bowler; this.overBowler = null;
+      this.overLegal = 0; this.overRuns = 0;
+    }
+
+    if(this.allOut){ this.finished = true; this.endReason = "all out"; }
+    else if(this.balls >= this.maxBalls){ this.finished = true; this.endReason = "overs completed"; }
+    else if(this.target!==null && this.runs >= this.target){ this.finished = true; this.endReason = "target reached"; }
+  }
+  wicketFall(b, outName, bowl){
+    const fig = this.bat.get(outName);
+    fig.out = true; fig.how = Innings.howOut(b);
+    this.wickets++;
+    if(BOWLER_WICKETS.includes(b.wicket)) bowl.wkts++;
+    if(b.fielder) this.fielding.set(b.fielder, (this.fielding.get(b.fielder)||0)+1);
+    this.fow.push({n:this.wickets, score:this.runs, name:outName, balls:this.balls});
+    this.donePart.push(this.part);
+    const survivor = outName===this.striker ? this.nonStriker : this.striker;
+    let repl = null;
+    if(!this.allOut){
+      repl = this.batting.players[this.nextIdx++];
+      this.bat.set(repl, newBat());
+      this.part = newPart(this.wickets+1, survivor, repl);
+    }
+    if(outName===this.striker) this.striker = repl; else this.nonStriker = repl;
+  }
+  static howOut(b){
+    const w = b.wicket, f = b.fielder;
+    if(w==="bowled") return `b ${b.bowler}`;
+    if(w==="lbw") return `lbw b ${b.bowler}`;
+    if(w==="caught") return f===b.bowler ? `c & b ${b.bowler}` : `c ${f} b ${b.bowler}`;
+    if(w==="stumped") return `st ${f} b ${b.bowler}`;
+    if(w==="hitwicket") return `hit wicket b ${b.bowler}`;
+    return f ? `run out (${f})` : "run out";
+  }
+  get runRate(){ return this.balls ? this.runs*6/this.balls : 0; }
+  get requiredRate(){
+    const left = this.maxBalls - this.balls;
+    if(this.target===null || left<=0) return null;
+    return Math.max(this.target-this.runs,0)*6/left;
+  }
+  partnerships(){
+    const parts = [...this.donePart];
+    if(!this.allOut && (this.part.balls || this.part.runs)) parts.push(this.part);
+    return parts;
+  }
+  statusLine(){
+    let s = `${this.batting.name} ${this.runs}/${this.wickets} (${fmtOvers(this.balls)}/${this.maxOvers} ov)  CRR ${this.runRate.toFixed(2)}`;
+    if(this.target!==null){
+      const need = this.target-this.runs, left = this.maxBalls-this.balls;
+      s += `  | Target ${this.target}`;
+      if(need>0 && left>0) s += `, need ${need} off ${left} balls, RRR ${this.requiredRate.toFixed(2)}`;
+    }
+    return s;
+  }
+  battersAtCrease(){
+    const parts = [];
+    for(const [name,mark] of [[this.striker,"*"],[this.nonStriker,""]]){
+      if(name){ const f = this.bat.get(name); parts.push(`${name} ${f.runs}(${f.balls})${mark}`); }
+    }
+    return parts.join("   ");
+  }
+}
+
+class Match {
+  constructor(a, b, overs){ this.teams = [a,b]; this.overs = overs; this.innings = []; this.log = []; }
+  start(batting){
+    const bowling = batting===this.teams[0] ? this.teams[1] : this.teams[0];
+    const target = this.innings.length ? this.innings[0].runs+1 : null;
+    const inn = new Innings(batting, bowling, this.overs, target);
+    this.innings.push(inn);
+    return inn;
+  }
+  result(){
+    if(this.innings.length<2 || !this.innings[1].finished) return "Match in progress";
+    const [i1,i2] = this.innings;
+    if(i2.runs > i1.runs){
+      const left = i2.batting.players.length-1-i2.wickets;
+      return `${i2.batting.name} won by ${plural(left,"wicket")}`;
+    }
+    if(i2.runs===i1.runs) return "Match tied";
+    return `${i1.batting.name} won by ${plural(i1.runs-i2.runs,"run")}`;
+  }
+  potm(){
+    const pts = new Map(), notes = new Map();
+    const add = (name,n,why) => {
+      pts.set(name,(pts.get(name)||0)+n);
+      if(!notes.has(name)) notes.set(name,[]);
+      notes.get(name).push(`${why} ${sg(n)}`);
+    };
+    for(const inn of this.innings){
+      for(const [name,f] of inn.bat){
+        add(name, f.runs+f.fours+2*f.sixes, `bat ${f.runs}(${f.balls})`);
+        if(f.runs>=100) add(name,40,"century");
+        else if(f.runs>=50) add(name,20,"fifty");
+        if(f.out && f.runs===0) add(name,-5,"duck");
+      }
+      for(const [name,f] of inn.bowl){
+        if(f.wkts) add(name,25*f.wkts,`${f.wkts} wkt`);
+        if(f.maidens) add(name,10*f.maidens,`${f.maidens} maiden`);
+        if(f.wkts>=5) add(name,30,"5-wkt haul");
+        else if(f.wkts>=3) add(name,15,"3-wkt haul");
+      }
+      for(const [name,n] of inn.fielding) add(name,10*n,`${n} fielding`);
+    }
+    return [...pts].sort((x,y)=>y[1]-x[1]).map(([n,p])=>({name:n, pts:p, why:notes.get(n).join(", ")}));
+  }
+}
+
+/* ============================ helpers ============================ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const labelOf = b => {
+  if(b.wicket) return "W";
+  if(b.extra==="wd") return b.extraRuns ? `Wd+${b.extraRuns}` : "Wd";
+  if(b.extra==="nb") return b.batRuns ? `Nb${b.batRuns}` : "Nb";
+  if(b.extra==="b") return `B${b.extraRuns}`;
+  if(b.extra==="lb") return `Lb${b.extraRuns}`;
+  return String(b.batRuns);
+};
+const chipCls = l => l==="W" ? "c-w" : /^(Wd|Nb|B|Lb)/.test(l) ? "c-ex" : l==="4" ? "c-four" : l==="6" ? "c-six" : "";
+const chip = l => `<span class="chip ${chipCls(l)}">${esc(l)}</span>`;
+
+const ROYALS = {name:"Royals", players:"Arjun Bhavin Chetan Dev Eshan Farhan Gopal Harsh Imran Jatin Kiran".split(" ")};
+const TITANS = {name:"Titans", players:"Lakshman Manoj Naveen Omkar Pranav Qasim Rohit Suresh Tarun Umesh Vikram".split(" ")};
+
+function scorecardHTML(inn, title){
+  const e = inn.extras, ext = e.wd+e.nb+e.b+e.lb;
+  const dnb = inn.batting.players.slice(inn.nextIdx);
+  const bats = [...inn.bat].map(([n,f]) =>
+    `<tr><td class="nm">${esc(n)}</td><td class="how">${esc(f.out ? f.how : "not out")}</td><td>${f.runs}</td><td>${f.balls}</td><td>${f.fours}</td><td>${f.sixes}</td><td>${sr(f).toFixed(2)}</td></tr>`).join("");
+  const bowls = [...inn.bowl].map(([n,f]) =>
+    `<tr><td class="nm">${esc(n)}</td><td>${fmtOvers(f.balls)}</td><td>${f.maidens}</td><td>${f.runs}</td><td>${f.wkts}</td><td>${eco(f).toFixed(2)}</td><td>${f.wides}</td><td>${f.noballs}</td></tr>`).join("");
+  const fow = inn.fow.map(f => `${f.n}-${f.score} (${esc(f.name)}, ${fmtOvers(f.balls)} ov)`).join(", ") || "-";
+  const parts = inn.partnerships().map(p => {
+    const tag = (p===inn.part && !inn.allOut) ? "*" : "";
+    return `<li>${ordinal(p.wicket)} wkt: ${esc(p.a)} &amp; ${esc(p.b)}: <b>${p.runs}${tag}</b> (${p.balls} b) <span>[${esc(p.a)} ${p.contrib.get(p.a)}, ${esc(p.b)} ${p.contrib.get(p.b)}, extras ${p.extras}]</span></li>`;
+  }).join("") || "<li>-</li>";
+  return `
+    <div class="sc-head"><h3>${esc(inn.batting.name)} · ${esc(title)}</h3><span class="tot">${inn.runs}/${inn.wickets}</span></div>
+    <div class="tbl"><table class="sc-t">
+      <thead><tr><th>Batter</th><th>Dismissal</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead>
+      <tbody>${bats || '<tr><td colspan="7">Yet to bat</td></tr>'}</tbody>
+    </table></div>
+    <p class="sc-meta">Extras <b>${ext}</b> (b ${e.b}, lb ${e.lb}, w ${e.wd}, nb ${e.nb}) · Total <b>${inn.runs}</b> (${inn.wickets} wkts, ${fmtOvers(inn.balls)} ov, RR ${inn.runRate.toFixed(2)})</p>
+    ${dnb.length ? `<p class="sc-meta">Did not bat: ${dnb.map(esc).join(", ")}</p>` : ""}
+    <p class="sc-sub">Fall of wickets</p>
+    <p class="sc-meta" style="margin-top:4px">${fow}</p>
+    <p class="sc-sub">Bowling</p>
+    <div class="tbl"><table class="sc-t">
+      <thead><tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>Econ</th><th>Wd</th><th>Nb</th></tr></thead>
+      <tbody>${bowls}</tbody>
+    </table></div>
+    <p class="sc-sub">Partnerships</p>
+    <ul class="sc-list">${parts}</ul>`;
+}
+
+/* ============================ live board (hero) ============================ */
+function st(inn, name, star){
+  if(!name) return null;
+  const f = inn.bat.get(name);
+  return f ? {name, runs:f.runs, balls:f.balls, star} : null;
+}
+function boardState(match, inn){
+  const last = inn.events[inn.events.length-1];
+  const bowlerName = last ? (inn.overBowler || last.bowler) : null;
+  const bf = bowlerName ? inn.bowl.get(bowlerName) : null;
+  return {
+    innNo: match.innings.indexOf(inn)+1,
+    team: inn.batting.name,
+    runs: inn.runs, wkts: inn.wickets,
+    overs: fmtOvers(inn.balls), maxOvers: inn.maxOvers,
+    rr: inn.runRate,
+    target: inn.target,
+    need: inn.target===null ? null : Math.max(inn.target-inn.runs,0),
+    left: inn.target===null ? null : inn.maxBalls-inn.balls,
+    rrr: inn.requiredRate,
+    bats: [st(inn, inn.striker, true), st(inn, inn.nonStriker, false)],
+    bowler: bowlerName || "-",
+    fig: bf ? `${fmtOvers(bf.balls)} · ${bf.runs}-${bf.wkts}` : "-",
+    recent: inn.events.slice(-6).map(labelOf),
+    result: match.result()
+  };
+}
+function boardHTML(s, comm){
+  const bats = s.bats.filter(Boolean)
+    .map(b => `${esc(b.name)} <b class="mono">${b.runs}(${b.balls})</b>${b.star ? '<span class="star">*</span>' : ""}`)
+    .join('<span class="sep">·</span>');
+  const needRow = (s.target!==null && s.need>0 && s.left>0)
+    ? `<div class="board-row"><span>Need ${s.need} off ${s.left} balls</span><b class="mono">RRR ${s.rrr.toFixed(2)}</b></div>` : "";
+  return `
+    <div class="board-top"><span class="live">Innings ${s.innNo} · ${s.maxOvers} ov</span><span>${esc(s.team)} batting</span></div>
+    <div class="board-main">
+      <div>
+        <div class="team">${esc(s.team)}</div>
+        <div class="score tick">${s.runs}<span class="sl">/${s.wkts}</span></div>
+      </div>
+      <div class="ovr">
+        <div>overs</div>
+        <div class="ov-num">${s.overs}</div>
+        <div>CRR ${s.rr.toFixed(2)}</div>
+        ${s.target!==null ? `<div>Target ${s.target}</div>` : ""}
+      </div>
+    </div>
+    ${needRow}
+    <div class="board-row"><span>${bats || "-"}</span></div>
+    <div class="board-row"><span>Bowling · ${esc(s.bowler)}</span><b class="mono">${s.fig}</b></div>
+    <div class="chips">${s.recent.map(chip).join("")}</div>
+    <div class="comm">${comm.map((c,i) => `<p class="${i===0 ? "new" : ""}">${esc(c)}</p>`).join("")}</div>
+    ${s.result!=="Match in progress" ? `<div class="result">${esc(s.result)}</div>` : ""}`;
+}
+function paintBoard(){
+  const inn = live.innings[live.innings.length-1];
+  const comm = live.log.length
+    ? live.log.slice(-4).reverse()
+    : ["Pick a bowler and record the first ball."];
+  $("#board").innerHTML = boardHTML(boardState(live, inn), comm);
+}
+
+/* ============================ live scorer ============================ */
+let live = null;
+function newMatch(){
+  live = new Match(ROYALS, TITANS, 5);
+  live.start(ROYALS);
+}
+const setMsg = (text, kind="") => { const m = $("#msg"); m.textContent = text; m.className = "msg" + (kind ? " "+kind : ""); };
+const pressed = id => { const b = document.querySelector(`#${id} [aria-pressed="true"]`); return b ? b.dataset.v : ""; };
+document.querySelectorAll(".seg").forEach(g => g.addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  g.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x===b ? "true" : "false"));
+}));
+function fillSelect(sel, items, placeholder){
+  const prev = sel.value;
+  sel.innerHTML = (placeholder!==null ? `<option value="">${esc(placeholder)}</option>` : "") + items.map(x => `<option>${esc(x)}</option>`).join("");
+  if([...sel.options].some(o => o.value===prev)) sel.value = prev;
+}
+function currentOver(inn){
+  const out = []; let legal = 0;
+  for(let i = inn.events.length-1; i>=0; i--){
+    const e = inn.events[i];
+    const isLegal = e.extra!=="wd" && e.extra!=="nb";
+    if(isLegal){
+      if(legal === inn.overLegal) break;
+      legal++;
+    }
+    out.unshift(e);
+  }
+  return out;
+}
+function renderLive(){
+  const inn = live.innings[live.innings.length-1];
+  const r = live.result();
+  $("#live").innerHTML = `
+    <div class="live-top">
+      <span class="kicker">${esc(inn.batting.name)} batting · innings ${live.innings.length}</span>
+      ${inn.finished ? `<span class="done">Innings over (${esc(inn.endReason)})</span>` : ""}
+    </div>
+    <div class="live-score">${inn.runs}<span>/${inn.wickets}</span><small>${fmtOvers(inn.balls)} ov</small></div>
+    <div class="small mono">${esc(inn.statusLine())}</div>
+    <div class="small mono">${esc(inn.battersAtCrease())}</div>
+    <div class="chips">${currentOver(inn).map(e => chip(labelOf(e))).join("") || '<span class="small">Over not started</span>'}</div>
+    ${r!=="Match in progress" ? `<div class="result">${esc(r)}</div>` : ""}`;
+  $("#liveCard").innerHTML = scorecardHTML(inn, `${ordinal(live.innings.length)} innings`);
+
+  const bowl = $("#bowler");
+  fillSelect(bowl, inn.bowling.players, "Choose bowler");
+  if(inn.overBowler){ bowl.value = inn.overBowler; }
+  bowl.disabled = inn.finished || !!inn.overBowler;
+  fillSelect($("#fld"), inn.bowling.players, "Fielder");
+  $("#rec").disabled = inn.finished;
+  $("#undo").disabled = !inn.events.length;
+  $("#chase").disabled = !(live.innings.length===1 && live.innings[0].finished);
+  paintBoard();
+}
+function recordBall(){
+  const inn = live.innings[live.innings.length-1];
+  const bowler = inn.overBowler || $("#bowler").value;
+  if(!bowler){ setMsg("Choose a bowler first", "err"); return; }
+  const runs = parseInt(pressed("runs"), 10);
+  const extra = pressed("extra") || null;
+  const kind = $("#wkt").value || null;
+  const ball = {
+    bowler, extra, batRuns:0, extraRuns:0,
+    wicket: kind,
+    out: $("#nons").checked ? "non_striker" : "striker",
+    fielder: ["caught","stumped","runout"].includes(kind) ? ($("#fld").value || null) : null
+  };
+  if(!extra || extra==="nb") ball.batRuns = runs; else ball.extraRuns = runs;
+  if((extra==="b" || extra==="lb") && runs<1){ setMsg("Byes and leg byes need at least 1 run", "err"); return; }
+  const prevStriker = inn.striker;
+  try {
+    inn.record(ball);
+  } catch(err){
+    setMsg(err.message, "err");
+    return;
+  }
+  let desc = `${ball.bowler} to ${prevStriker}, ${labelOf(ball)}`;
+  if(ball.wicket){
+    const f = inn.fow[inn.fow.length-1];
+    desc += `: ${f.name} ${inn.bat.get(f.name).how}`;
+  }
+  live.log.push(desc);
+  setMsg(labelOf(ball) + (kind ? ` · ${kind}` : "") + " recorded", "ok");
+  $("#extra").querySelectorAll("button").forEach((x,i) => x.setAttribute("aria-pressed", i===0 ? "true" : "false"));
+  $("#wkt").value = "";
+  $("#nons").checked = false;
+  renderLive();
+}
+$("#rec").addEventListener("click", recordBall);
+$("#undo").addEventListener("click", () => {
+  const inn = live.innings[live.innings.length-1];
+  const undone = inn.undo();
+  if(undone) live.log.pop();
+  setMsg(undone ? "Last delivery removed" : "Nothing to undo");
+  renderLive();
+});
+$("#chase").addEventListener("click", () => {
+  live.start(TITANS);
+  setMsg("Titans are chasing " + live.innings[1].target, "ok");
+  renderLive();
+});
+$("#reset").addEventListener("click", () => {
+  newMatch();
+  setMsg("New match started");
+  renderLive();
+});
+newMatch();
+renderLive();
+
+/* ============================ copy button ============================ */
+document.querySelectorAll("[data-copy]").forEach(btn => btn.addEventListener("click", () => {
+  const text = btn.dataset.copy;
+  const done = () => { btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy", 1400); };
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(done, () => { btn.textContent = "Select text"; });
+  } else {
+    btn.textContent = "Select text";
+  }
+}));
+
+/* ============================ reveal on scroll (no opacity, so content is visible at rest) ============================ */
+if("IntersectionObserver" in window){
+  const io = new IntersectionObserver(entries => entries.forEach(en => {
+    if(en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); }
+  }), {threshold:.12});
+  document.querySelectorAll(".rv").forEach(el => io.observe(el));
+} else {
+  document.querySelectorAll(".rv").forEach(el => el.classList.add("in"));
+}
+</script>
