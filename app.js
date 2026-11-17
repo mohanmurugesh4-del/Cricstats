@@ -3,7 +3,8 @@
 
 const CFG = window.CRICSTATS_CONFIG || {};
 const READY = !!CFG.SUPABASE_URL && !CFG.SUPABASE_URL.includes("YOUR-PROJECT");
-const sb = READY ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+const LIB_OK = !!(window.supabase && window.supabase.createClient);
+const sb = READY && LIB_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
 const app = document.getElementById("app");
 
 const S = { user: null, role: "viewer", filter: "live", tab: "commentary", current: null, channel: null, summaries: [] };
@@ -25,11 +26,20 @@ function fail(err) { toast((err && err.message) || "Something went wrong", "err"
 
 /* ---------- boot and auth ---------- */
 async function boot() {
+  if (!LIB_OK || window.__libFailed) {
+    app.innerHTML = `<div class="notice"><b>The site could not load its database library.</b> Check your internet connection, then refresh the page. If it still fails, try a private window or another browser.</div>`;
+    return;
+  }
   if (!READY) {
     app.innerHTML = `<div class="notice"><b>Connect Supabase to turn this on.</b> Edit <code>config.js</code> with your project URL and anon key, and run <code>supabase.sql</code> once. See the README.</div>`;
     return;
   }
-  const { data } = await sb.auth.getSession();
+  let data;
+  try { ({ data } = await sb.auth.getSession()); }
+  catch (err) {
+    app.innerHTML = `<div class="notice"><b>Could not reach the database.</b> ${esc(err.message || err)}</div>`;
+    return;
+  }
   await setUser(data.session ? data.session.user : null);
   sb.auth.onAuthStateChange(async (_event, session) => {
     const before = S.user ? S.user.id : null;
@@ -573,4 +583,4 @@ $("#signup-form").addEventListener("submit", e => {
   register(f.get("email").trim(), f.get("password"), f.get("role"), (f.get("code") || "").trim());
 });
 
-boot();
+boot().catch(err => { app.innerHTML = `<div class="notice"><b>Something went wrong loading the site.</b> ${esc(err && err.message || err)}</div>`; });
